@@ -10,25 +10,34 @@ import os
 import numpy as np
 from PIL import Image
 import cv2
+import argparse
 
-num_epochs = 51
+parser = argparse.ArgumentParser(description='Segmentation')
+parser.add_argument('--input', default='./data/', type=str, help='input path')
+parser.add_argument('--train', default=False, action='store_true', help='Training or Testing')
+parser.add_argument('--epoch', default=50, type=int, help='training epochs')
+parser.add_argument('--output', default='./result/', type=str, help='output path')
+
+args = parser.parse_args()
+
+num_epochs = args.epoch
 batch_size = 128
 learning_rate = 1e-3
 img_width = 256
 img_height = 256
-train = False
+train = args.train
 
-if not os.path.exists('./result'):
-    os.mkdir('./result')
+if not os.path.exists(args.output):
+    os.mkdir(args.output)
 
 def to_img(x):
     x = x.max(1)[1]
     x = x.view(x.size(0), 1, img_width, img_height)
     return x
 
-class autoencoder(nn.Module):
+class encoderdecoder(nn.Module):
     def __init__(self):
-        super(autoencoder, self).__init__()
+        super(encoderdecoder, self).__init__()
         self.encoder = nn.Sequential(
             nn.Conv2d(1, 16, 3, stride=3, padding=1), 
             nn.ReLU(True),
@@ -78,13 +87,13 @@ if __name__ == "__main__":
         # transforms.Normalize((0.5,), (0.5,))
     ])
 
-    dataset = DocDataset("../CRAFT-pytorch/bbox/", "../bce_augmented/", img_width, img_height, split='train', transform=img_transform)
+    dataset = DocDataset(os.path.join(args.input, "data"), os.path.join(args.input, "target"), img_width, img_height, split='train', transform=img_transform)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    testset = DocDataset("../CRAFT-pytorch/bbox/", "../bce_augmented/", img_width, img_height, split='test', transform=img_transform)
+    testset = DocDataset(os.path.join(args.input, "data"), os.path.join(args.input, "target"), img_width, img_height, split='test', transform=img_transform)
     testloader = DataLoader(testset, batch_size=1, shuffle=False)
 
-    model = autoencoder().cuda()
+    model = encoderdecoder().cuda()
     
     if (train):
         criterion = nn.CrossEntropyLoss()
@@ -108,13 +117,13 @@ if __name__ == "__main__":
                 .format(epoch+1, num_epochs, loss.data[0]))
             if epoch % 10 == 0:
                 pic = to_img(output.cpu().data)
-                save_image(pic, './result/image_{}.png'.format(epoch))
-                torch.save(model.state_dict(), './checkpoint.pth')
+                save_image(pic, args.output + '/image_{}.png'.format(epoch))
+                torch.save(model.state_dict(), args.output + './checkpoint.pth')
 
-        torch.save(model.state_dict(), './checkpoint.pth')
+        torch.save(model.state_dict(), os.path.join(args.output, 'checkpoint.pth'))
     else:
         model.eval()
-        model.load_state_dict(torch.load("./checkpoint.pth"))
+        model.load_state_dict(torch.load(os.path.join(args.output, 'checkpoint.pth')))
         preds = []
         gts = []
         paths = []
